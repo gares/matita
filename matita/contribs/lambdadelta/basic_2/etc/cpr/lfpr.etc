@@ -1,0 +1,48 @@
+(**************************************************************************)
+(*       ___                                                              *)
+(*      ||M||                                                             *)
+(*      ||A||       A project by Andrea Asperti                           *)
+(*      ||T||                                                             *)
+(*      ||I||       Developers:                                           *)
+(*      ||T||         The HELM team.                                      *)
+(*      ||A||         http://helm.cs.unibo.it                             *)
+(*      \   /                                                             *)
+(*       \ /        This file is distributed under the terms of the       *)
+(*        v         GNU General Public License Version 2                  *)
+(*                                                                        *)
+(**************************************************************************)
+
+notation "hvbox( ⦃ term 46 L1 ⦄ ➡ break ⦃ term 46 L2 ⦄ )"
+   non associative with precedence 45
+   for @{ 'FocalizedPRed $L1 $L2 }.
+
+include "basic_2/unfold/ltpss_sn.ma".
+include "basic_2/reducibility/ltpr.ma".
+
+(* FOCALIZED PARALLEL REDUCTION ON LOCAL ENVIRONMENTS ***********************)
+
+definition lfpr: relation lenv ≝
+   λL1,L2. ∃∃L. L1 ➡ L & L ⊢ ▶* [0, |L|] L2
+.
+
+interpretation
+  "focalized parallel reduction (environment)"
+  'FocalizedPRed L1 L2 = (lfpr L1 L2).
+
+(* Basic properties *********************************************************)
+
+(* Note: lemma 250 *)
+lemma lfpr_refl: ∀L. ⦃L⦄ ➡ ⦃L⦄.
+/2 width=3/ qed.
+
+lemma ltpss_sn_lfpr: ∀L1,L2,d,e. L1 ⊢ ▶* [d, e] L2 → ⦃L1⦄ ➡ ⦃L2⦄.
+/3 width=5/ qed.
+
+lemma ltpr_lfpr: ∀L1,L2. L1 ➡ L2 → ⦃L1⦄ ➡ ⦃L2⦄.
+/3 width=3/ qed.
+
+(* Basic inversion lemmas ***************************************************)
+
+lemma lfpr_inv_atom1: ∀L2. ⦃⋆⦄ ➡ ⦃L2⦄ → L2 = ⋆.
+#L2 * #L #HL >(ltpr_inv_atom1 … HL) -HL #HL2 >(ltpss_sn_inv_atom1 … HL2) -HL2 //
+qed-.

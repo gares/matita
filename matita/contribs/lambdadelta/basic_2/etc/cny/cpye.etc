@@ -1,0 +1,89 @@
+(**************************************************************************)
+(*       ___                                                              *)
+(*      ||M||                                                             *)
+(*      ||A||       A project by Andrea Asperti                           *)
+(*      ||T||                                                             *)
+(*      ||I||       Developers:                                           *)
+(*      ||T||         The HELM team.                                      *)
+(*      ||A||         http://helm.cs.unibo.it                             *)
+(*      \   /                                                             *)
+(*       \ /        This file is distributed under the terms of the       *)
+(*        v         GNU General Public License Version 2                  *)
+(*                                                                        *)
+(**************************************************************************)
+
+include "basic_2/notation/relations/psubsteval_6.ma".
+include "basic_2/relocation/cny.ma".
+include "basic_2/substitution/cpys.ma".
+
+(* EVALUATION FOR CONTEXT-SENSITIVE EXTENDED SUBSTITUTION ON TERMS **********)
+
+definition cpye: ynat → ynat → relation4 genv lenv term term ≝
+                 λd,e,G,L,T1,T2. ⦃G, L⦄ ⊢ T1 ▶*[d, e] T2 ∧ ⦃G, L⦄ ⊢ ▶[d, e] 𝐍⦃T2⦄.
+
+interpretation "evaluation for context-sensitive extended substitution (term)"
+   'PSubstEval G L T1 T2 d e = (cpye d e G L T1 T2).
+
+(* Basic_properties *********************************************************)
+
+(* Note: this should go in subconversion *)
+lemma leqy_cpye_trans: ∀G,L2,T1,T2,d,e. ⦃G, L2⦄ ⊢ T1 ▶*[d, e] 𝐍⦃T2⦄ →
+                       ∀L1. L1 ⊑×[d, e] L2 → L2 ⊑×[d, e] L1 → ⦃G, L1⦄ ⊢ T1 ▶*[d, e] 𝐍⦃T2⦄.
+#G #L2 #T1 #T2 #d #e *
+/4 width=8 by lsuby_cpys_trans, lsuby_cny_conf, conj/
+qed-.
+
+lemma cpye_sort: ∀G,L,d,e,k. ⦃G, L⦄ ⊢ ⋆k ▶*[d, e] 𝐍⦃⋆k⦄.
+/3 width=5 by cny_sort, conj/ qed.
+
+lemma cpye_free: ∀G,L,d,e,i. |L| ≤ i → ⦃G, L⦄ ⊢ #i ▶*[d, e] 𝐍⦃#i⦄.
+/3 width=6 by cny_lref_free, conj/ qed.
+
+lemma cpye_top: ∀G,L,d,e,i. d + e ≤ yinj i → ⦃G, L⦄ ⊢ #i ▶*[d, e] 𝐍⦃#i⦄.
+/3 width=6 by cny_lref_top, conj/ qed.
+
+lemma cpye_skip: ∀G,L,d,e,i. yinj i < d → ⦃G, L⦄ ⊢ #i ▶*[d, e] 𝐍⦃#i⦄.
+/3 width=6 by cny_lref_skip, conj/ qed.
+
+lemma cpye_gref: ∀G,L,d,e,p. ⦃G, L⦄ ⊢ §p ▶*[d, e] 𝐍⦃§p⦄.
+/3 width=5 by cny_gref, conj/ qed.
+
+lemma cpye_bind: ∀G,L,V1,V2,d,e. ⦃G, L⦄ ⊢ V1 ▶*[d, e] 𝐍⦃V2⦄ →
+                 ∀I,T1,T2. ⦃G, L.ⓑ{I}V1⦄ ⊢ T1 ▶*[⫯d, e] 𝐍⦃T2⦄ →
+                 ∀a. ⦃G, L⦄ ⊢ ⓑ{a,I}V1.T1 ▶*[d, e] 𝐍⦃ⓑ{a,I}V2.T2⦄.
+#G #L #V1 #V2 #d #e * #HV12 #HV2 #I #T1 #T2 *
+/5 width=8 by cpys_bind, cny_bind, lsuby_cny_conf, lsuby_succ, conj/
+qed.
+
+lemma cpye_flat: ∀G,L,V1,V2,d,e. ⦃G, L⦄ ⊢ V1 ▶*[d, e] 𝐍⦃V2⦄ →
+                 ∀T1,T2. ⦃G, L⦄ ⊢ T1 ▶*[d, e] 𝐍⦃T2⦄ →
+                 ∀I. ⦃G, L⦄ ⊢ ⓕ{I}V1.T1 ▶*[d, e] 𝐍⦃ⓕ{I}V2.T2⦄.
+#G #L #V1 #V2 #d #e * #HV12 #HV2 #T1 #T2 *
+/3 width=7 by cpys_flat, cny_flat, conj/
+qed.
+
+(* Basic inversion lemmas ***************************************************)
+
+lemma cpye_inv_sort1: ∀G,L,X,d,e,k. ⦃G, L⦄ ⊢ ⋆k ▶*[d, e] 𝐍⦃X⦄ → X = ⋆k.
+#G #L #X #d #e #k * /2 width=5 by cpys_inv_sort1/
+qed-.
+
+lemma cpye_inv_gref1: ∀G,L,X,d,e,p. ⦃G, L⦄ ⊢ §p ▶*[d, e] 𝐍⦃X⦄ → X = §p.
+#G #L #X #d #e #p * /2 width=5 by cpys_inv_gref1/
+qed-.
+
+lemma cpye_inv_bind1: ∀a,I,G,L,V1,T1,X,d,e. ⦃G, L⦄ ⊢ ⓑ{a,I}V1.T1 ▶*[d, e] 𝐍⦃X⦄ →
+                      ∃∃V2,T2. ⦃G, L⦄ ⊢ V1 ▶*[d, e] 𝐍⦃V2⦄ & ⦃G, L.ⓑ{I}V1⦄ ⊢ T1 ▶*[⫯d, e] 𝐍⦃T2⦄ &
+                               X = ⓑ{a,I}V2.T2.
+#a #I #G #L #V1 #T1 #X #d #e * #H1 #H2 elim (cpys_inv_bind1 … H1) -H1
+#V2 #T2 #HV12 #HT12 #H destruct elim (cny_inv_bind … H2) -H2
+/5 width=8 by lsuby_cny_conf, lsuby_succ, ex3_2_intro, conj/
+qed-.
+
+lemma cpye_inv_flat1: ∀I,G,L,V1,T1,X,d,e. ⦃G, L⦄ ⊢ ⓕ{I}V1.T1 ▶*[d, e] 𝐍⦃X⦄ →
+                      ∃∃V2,T2. ⦃G, L⦄ ⊢ V1 ▶*[d, e] 𝐍⦃V2⦄ & ⦃G, L⦄ ⊢ T1 ▶*[d, e] 𝐍⦃T2⦄ &
+                               X = ⓕ{I}V2.T2.
+#I #G #L #V1 #T1 #X #d #e * #H1 #H2 elim (cpys_inv_flat1 … H1) -H1
+#V2 #T2 #HV12 #HT12 #H destruct elim (cny_inv_flat … H2) -H2
+/3 width=5 by ex3_2_intro, conj/
+qed-.

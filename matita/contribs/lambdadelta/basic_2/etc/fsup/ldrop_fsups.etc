@@ -1,0 +1,30 @@
+(**************************************************************************)
+(*       ___                                                              *)
+(*      ||M||                                                             *)
+(*      ||A||       A project by Andrea Asperti                           *)
+(*      ||T||                                                             *)
+(*      ||I||       Developers:                                           *)
+(*      ||T||         The HELM team.                                      *)
+(*      ||A||         http://helm.cs.unibo.it                             *)
+(*      \   /                                                             *)
+(*       \ /        This file is distributed under the terms of the       *)
+(*        v         GNU General Public License Version 2                  *)
+(*                                                                        *)
+(**************************************************************************)
+
+include "basic_2/grammar/fsups.ma".
+include "basic_2/substitution/ldrop_fsup.ma".
+
+(* LOCAL ENVIRONMENT SLICING ************************************************)
+
+(* Inversion lemmas on plus-iterated supclosure  ****************************)
+
+lemma fsupp_inv_atom1_fsups: ∀J,L1,L2,T2. ⦃L1, ⓪{J}⦄ ⊃+ ⦃L2, T2⦄ →
+                             ∃∃I,K,V,i. ⇩[0, i] L1 ≡ K.ⓑ{I}V &
+                             ⦃K, V⦄ ⊃* ⦃L2, T2⦄ & J = LRef i.
+#J #L1 #L2 #T2 #H @(fsupp_ind … H) -L2 -T2
+[ #L2 #T2 #H
+  elim (fsup_inv_atom1_ldrop … H) -H * #i #HL12 #H destruct /2 width=7/
+| #L #T #L2 #T2 #_ #HT2 * #I #K #V #i #HLK #HVT #H destruct /3 width=8/
+]
+qed-.

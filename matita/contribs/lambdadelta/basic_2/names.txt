@@ -1,0 +1,98 @@
+NAMING CONVENTIONS FOR METAVARIABLES
+
+A,B    : arity
+C      : candidate of reducibility
+D,E    : RTM environment
+F,G    : global environment 
+H      : reserved: transient premise
+IH     : reserved: inductive premise
+I,J    : item
+K,L    : local environment
+M,N    : reserved: future use
+O,P,Q  :
+R      : generic predicate (relation)
+S      : RTM stack
+T,U,V,W: term
+X,Y,Z  : reserved: transient objet denoted by a capital letter
+
+a,b    : binder polarity
+c      : reserved: future use (\lambda\delta 3)
+d      : relocation depth
+e      : relocation height
+f      :
+g      : sort degree parameter
+h      : sort hierarchy parameter
+i,j    : local reference position index (de Bruijn's)
+k      : sort index
+l      : term degree
+m,n    : reserved: future use
+o      :
+p,q    : global reference position
+r      : reduction kind parameter (true = ordinary, false = extended)
+s      : local dropping kind parameter (true = general, false = restricted)
+t,u    : local reference position level (de Bruijn's) (RTM)
+v,w    :
+x,y,z  : reserved: transient objet denoted by a small letter
+
+NAMING CONVENTIONS FOR CONSTRUCTORS
+
+0: atomic
+2: binary
+
+A: application to vector
+F: boolean false
+T: boolean true
+
+a: application
+b: binder
+d: abbreviation
+f: flat
+l: abstraction
+n: native type annotation
+
+NAMING CONVENTIONS FOR TRANSFORMATIONS AND RELATED FORMS
+
+- prefix and first letter
+
+b: bi contex-sensitive for local environments
+c: contex-sensitive for terms
+f: context-freee for closures
+l: sn contex-sensitive for local environments
+r: dx contex-sensitive for local environments
+s: stratified (prefix) 
+t: context-free for terms
+
+- second letter
+
+i: irreducible form
+n: normal form
+p: reflexive parallel transformation
+q: sequential transformation
+r: reducible form
+s: strongly normalizing form
+
+- third letter
+
+b: "big tree" reduction
+c: conversion
+d: decomposed extended reduction
+e: decomposed extended conversion
+q: restricted reduction
+r: reduction
+s: substitution
+u: supclosure
+w: reserved for generic pointwise extension
+x: extended reduction
+y: extended substitution
+
+- forth letter (if present)
+
+c: proper single step (general)                (successor)
+e: reflexive transitive closure to normal form (evaluation)
+g: proper multiple step (general)              (greater)
+p: non-reflexive transitive closure            (plus)
+q: reflexive closure                           (question)
+r: proper multiple step (restricted)           (restricted)
+s: reflexive transitive closure                (star)
+u: proper single step (restricted)             (unit)
+x: reserved for generic pointwise extension

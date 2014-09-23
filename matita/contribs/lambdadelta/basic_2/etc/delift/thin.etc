@@ -1,0 +1,41 @@
+(**************************************************************************)
+(*       ___                                                              *)
+(*      ||M||                                                             *)
+(*      ||A||       A project by Andrea Asperti                           *)
+(*      ||T||                                                             *)
+(*      ||I||       Developers:                                           *)
+(*      ||T||         The HELM team.                                      *)
+(*      ||A||         http://helm.cs.unibo.it                             *)
+(*      \   /                                                             *)
+(*       \ /        This file is distributed under the terms of the       *)
+(*        v         GNU General Public License Version 2                  *)
+(*                                                                        *)
+(**************************************************************************)
+
+notation "hvbox( ▼ * [ term 46 d , break term 46 e ] break term 46 T1 ≡ break term 46 T2 )"
+   non associative with precedence 45
+   for @{ 'TSubst $T1 $d $e $T2 }.
+
+include "basic_2/unfold/ltpss_sn.ma".
+
+(* BASIC LOCAL ENVIRONMENT THINNING *****************************************)
+
+definition thin: nat → nat → relation lenv ≝
+                 λd,e,L1,L2. ∃∃L. L1 ⊢ ▶* [d, e] L & ⇩[d, e] L ≡ L2.
+
+interpretation "basic thinning (local environment)"
+   'TSubst L1 d e L2 = (thin d e L1 L2).
+
+(* Basic properties *********************************************************)
+
+lemma ldrop_thin: ∀L1,L2,d,e. ⇩[d, e] L1 ≡ L2 → ▼*[d, e] L1 ≡ L2.
+/2 width=3/ qed.
+
+(* Basic inversion lemmas ***************************************************)
+
+lemma thin_inv_thin1: ∀I,K1,V1,L2,e. ▼*[0, e] K1.ⓑ{I} V1 ≡ L2 → 0 < e →
+                      ▼*[0, e - 1] K1 ≡ L2.
+#I #K1 #V1 #L2 #e * #X #HK1 #HL2 #e
+elim (ltpss_sn_inv_tpss21 … HK1 ?) -HK1 // #K #V #HK1 #_ #H destruct
+lapply (ldrop_inv_ldrop1 … HL2 ?) -HL2 // /2 width=3/
+qed-.

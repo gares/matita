@@ -1,0 +1,33 @@
+(**************************************************************************)
+(*       ___                                                              *)
+(*      ||M||                                                             *)
+(*      ||A||       A project by Andrea Asperti                           *)
+(*      ||T||                                                             *)
+(*      ||I||       Developers:                                           *)
+(*      ||T||         The HELM team.                                      *)
+(*      ||A||         http://helm.cs.unibo.it                             *)
+(*      \   /                                                             *)
+(*       \ /        This file is distributed under the terms of the       *)
+(*        v         GNU General Public License Version 2                  *)
+(*                                                                        *)
+(**************************************************************************)
+
+include "basic_2/unfold/delift.ma".
+include "apps_2/MLTT1_1/genv_primitive.ma".
+
+(* JUDJEMENTS ***************************************************************)
+
+(* type judgement *)
+inductive TJ: lenv → predicate term ≝
+| tj_weak : ∀L,V,T1,T2. TJ L V → TJ L T1 → ⇧[0,1] T1 ≡ T2 → TJ (L Λ V) T2
+| tj_empty: TJ (⋆) 𝔼
+| tj_one  : TJ (⋆) 𝕆
+| tj_sum  : ∀G,A,B. TJ G A → TJ G B → TJ G (A ⊕ B)
+.
+
+(* element judgement *)
+inductive EJ: lenv → relation term ≝
+| tj_erec: ∀L,V,T1,T2. 
+           EJ L V 𝔼 → TJ (L Λ 𝔼) T1 → L Δ V ⊢ T1 [0,1] ≡ T2 → EJ L 𝕖𝕣[V] T2
+| tj_tt  : EJ (⋆) 𝕥 𝕆
+.

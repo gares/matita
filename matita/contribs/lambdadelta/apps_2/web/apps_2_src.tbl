@@ -1,0 +1,40 @@
+name "apps_2_src"
+
+table {
+   class "gray"
+   [ { "component" * } {
+        [ { "plane" * } {
+             [ "files" * ]
+          }
+        ]
+     }
+   ]
+(*
+   class "orange"
+   [ { "MLTT1" * } {
+        [ { "" * } {
+             [ "genv_primitive" "judgement" * ]
+          }
+        ]
+     }
+   ]
+*)
+   class "red"
+   [ { "functional" * } {
+        [ { "reduction and type machine" * } {
+             [ "rtm" "rtm_step ( ? ⇨ ? )" * ]
+          }
+        ]
+        [ { "relocation" * } {
+             [ "lift ( ↑[?,?] ? )" * ]
+          }
+        ]
+     }
+   ]
+}
+
+class "top"               { * }
+
+class "capitalize italic" { 0 }
+
+class "italic"            { 1 }
