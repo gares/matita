@@ -558,6 +558,111 @@ let extract_uris status uris =
   ) status uris
 ;;
 
+let inref,is_ref,outref =
+  Lpdata.C.declare NReference.string_of_reference NReference.eq
+;;
+
+let embed (t : NCic.term) : Lpdata.LP.data =
+  let module LP = Lpdata.LP in
+  let module L = Lpdata.L in
+  let module N = Lpdata.Name in
+  let app hd args = LP.mkApp (L.of_list (LP.mkCon hd 0 :: args)) in
+  let rec aux = function
+   | NCic.Rel n -> LP.mkDB n
+   | NCic.Meta _ -> LP.mkCon "hole" 0
+   | NCic.Appl l -> app "app" [LP.mkSeq (L.of_list (List.map aux l)) LP.mkNil]
+   | NCic.Prod(_name,src,tgt) -> app "prod" [aux src; LP.mkBin 1 (aux tgt)]
+   | NCic.Lambda(_name,src,tgt) -> app "lam" [aux src; LP.mkBin 1 (aux tgt)]
+   | NCic.LetIn(_name,ty,v,bo) ->
+       app "let-in" [aux ty; aux v;LP.mkBin 1 (aux bo)]
+   | NCic.Const r -> app "atom" [LP.mkExt (inref r)]
+   | NCic.Sort _sort -> LP.mkCon "set" 0
+   | NCic.Implicit `Vector -> LP.mkCon "dots" 0
+   | NCic.Implicit _ -> LP.mkCon "hole" 0
+   | NCic.Match (r,oty,t,b) -> raise Lprun.NoClause
+  in
+    aux t
+;;
+
+let test_elpi : #NCic.status -> NCic.term -> unit = Lpdata.(
+(*
+  ignore(Trace.parse_argv [|
+    "xxx"; 
+    "-trace-on";"-trace-at";"run";"1";"1000";"-trace-only";"run"
+  |]);
+*)
+  let ic = open_in "../refiner.elpi" in
+  Elpi.register_std ();
+  let b = Buffer.create 1024 in
+  begin try
+    while true do Buffer.add_string b (input_line ic^"\n") done;
+    assert false
+  with End_of_file -> () end;
+  let matita = ref None in
+  let get_matita () = match !matita with None -> assert false | Some x -> x in
+  let destruct t =
+    match LP.look t with
+    | LP.Seq (l,tl)
+      when L.len l = 2 && LP.equal tl LP.mkNil ->
+        (match LP.look (L.hd l) with
+        | LP.Ext c -> c, L.get 1 l
+        | _ -> raise Lprun.NoClause)
+    | _ -> raise Lprun.NoClause in
+  Lprun.register_custom_predicate "environment"
+    (fun t s ->
+       let t, s = Red.nf t s in
+       let k, v = destruct t in
+       if not (is_ref k) then raise Lprun.NoClause
+       else
+         let t = NCic.Const (outref k) in
+         let ty = NCicTypeChecker.typeof (get_matita ()) ~subst:[] ~metasenv:[]
+           [] t in
+         let lp_ty = embed ty in
+         Lprun.unify v lp_ty s);
+  Lprun.register_custom_predicate "environment-body"
+    (fun t s ->
+       let t, s = Red.nf t s in
+       let k, v = destruct t in
+       if not (is_ref k) then raise Lprun.NoClause
+       else
+         try let _,_,bo,_,_,_ =
+           NCicEnvironment.get_checked_def (get_matita()) (outref k) in
+         let lp_bo = embed bo in
+         Lprun.unify v lp_bo s with _ -> raise Lprun.NoClause);
+  let p = LP.parse_program (Buffer.contents b) in
+  fun (s : #NCic.status) g ->
+    matita := Some s;
+    let goal =
+      try 
+        LP.mkSigma1
+         (LP.mkSigma1
+          (LP.mkApp
+           (L.of_list[LP.mkCon "of" 0;embed g;LP.mkDB 1;LP.mkDB 2])))
+      with Lprun.NoClause as e ->
+        Printf.eprintf "no goal:\n%s\n%!"
+          (s#ppterm ~context:[] ~subst:[] ~metasenv:[] g); raise e in
+    try
+      let g,assignments,s,dgs,continuation = Lprun.run_dls p goal in
+      Format.eprintf "@\n@[<hv2>input:@ %a@]@\n%!"
+        (LP.prf_goal []) (fst(Red.nf g (Subst.empty 0)));
+      List.iter (fun x ->
+        Format.eprintf "@[<hv2>%a@ = %a@]@\n%!"
+          (LP.prf_data []) x (LP.prf_data []) (fst(Red.nf x s)))
+      assignments;
+   List.iter (fun (g,eh) ->
+    Format.eprintf "delay: @[<hv>%a@ |- %a@]\n%!"
+     (LP.prf_program ~compact:false)
+     (List.map (function i,k,p,u -> i,k,fst(Red.nf p s),u) eh)
+     (LP.prf_goal []) (fst(Red.nf g s))) dgs;
+    with Lprun.NoClause ->
+      Format.eprintf "@\n@[<hv2>input:@ %a@]@\n%!" (LP.prf_goal []) goal;
+      Printf.eprintf "no solutions\n%!"
+) ;;
+
+let test_elpi (s : #NCic.status) = function
+  | _,_,_,_,NCic.Constant (_,_,_,t,_) -> (try test_elpi s t with _ -> ())
+  | _ -> ()
+
 let rec eval_ncommand ~include_paths opts status (text,prefix_len,cmd) =
   match cmd with
   | GrafiteAst.Include (loc, mode, fname) ->
@@ -867,6 +972,7 @@ let rec eval_ncommand ~include_paths opts status (text,prefix_len,cmd) =
       let status,obj =
        GrafiteDisambiguate.disambiguate_nobj status
         ~baseuri:status#baseuri (text,prefix_len,obj) in
+      test_elpi status obj;
       let uri,height,nmenv,nsubst,nobj = obj in
       let ninitial_stack = Continuationals.Stack.of_nmetasenv nmenv in
       let status = status#set_obj obj in

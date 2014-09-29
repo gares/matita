@@ -67,6 +67,7 @@ mysql \
 netstring \
 ulex08 \
 zip \
+elpi \
 "
 
 # (Matita) findlib requisites
@@ -89,11 +90,12 @@ FINDLIB_REQUIRES="\
 $FINDLIB_CREQUIRES \
 lablgtk2.glade \
 lablgtk2.sourceview2 \
+elpi \
 "
 for r in $FINDLIB_LIBSREQUIRES $FINDLIB_REQUIRES
 do
   AC_MSG_CHECKING(for $r ocaml library)
-  if OCAMLPATH=$OCAMLPATH $OCAMLFIND query $r &> /dev/null; then
+  if OCAMLPATH=$OCAMLPATH:../ $OCAMLFIND query $r &> /dev/null; then
     AC_MSG_RESULT(yes)
   else
     AC_MSG_ERROR(could not find $r ocaml library)
@@ -195,6 +197,7 @@ AC_SUBST(HAVE_OCAMLOPT)
 AC_SUBST(LABLGLADECC)
 AC_SUBST(MATITA_VERSION)
 AC_SUBST(OCAMLFIND)
+OCAMLPATH=$OCAMLPATH:../../../:../:../../
 AC_SUBST(OCAMLPATH)
 AC_SUBST(RT_BASE_DIR)
 AC_SUBST(SRCROOT)
