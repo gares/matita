@@ -1136,6 +1136,246 @@ and eat_prods status ~localise force_ty metasenv subst context expty orig_t orig
   (*D*)in outside true; rc with exc -> outside false; raise exc
 ;;
 
+
+(* ELPI *)
+let _ =
+  let control = Gc.get () in
+  let tweaked_control = { control with
+    Gc.minor_heap_size = 33554432; (** 4M *)
+    Gc.space_overhead = 120;
+  } in
+  Gc.set tweaked_control
+;;
+
+
+let inref,is_ref,outref =
+  Lpdata.C.declare NReference.string_of_reference NReference.eq
+;;
+
+let embed (t : NCic.term) : Lpdata.LP.data =
+  let module LP = Lpdata.LP in
+  let module L = Lpdata.L in
+  let module N = Lpdata.Name in
+  let app hd args = LP.mkApp (L.of_list (LP.mkCon hd 0 :: args)) in
+  let rec aux = function
+   | NCic.Rel n -> LP.mkDB n
+   | NCic.Meta _ -> LP.mkCon "hole" 0
+   | NCic.Appl l -> app "app" [LP.mkSeq (L.of_list (List.map aux l)) LP.mkNil]
+   | NCic.Prod(_name,src,tgt) -> app "prod" [aux src; LP.mkBin 1 (aux tgt)]
+   | NCic.Lambda(_name,src,tgt) -> app "lam" [aux src; LP.mkBin 1 (aux tgt)]
+   | NCic.LetIn(_name,ty,v,bo) ->
+       app "let-in" [aux ty; aux v;LP.mkBin 1 (aux bo)]
+   | NCic.Const r -> app "atom" [LP.mkExt (inref r)]
+   | NCic.Sort _sort -> LP.mkCon "set" 0
+   | NCic.Implicit `Vector -> LP.mkCon "dots" 0
+   | NCic.Implicit _ -> LP.mkCon "hole" 0
+   | NCic.Match (_,oty,t,b) -> app "match" ([aux oty;aux t] @ List.map aux b)
+  in
+    aux t
+;;
+
+let readback (t : Lpdata.LP.data) : NCic.term =
+  let module LP = Lpdata.LP in
+  let module L = Lpdata.L in
+  let module C = NCic in
+  let destBin1 x = match LP.look x with LP.Bin (1,t) -> t | _ -> 
+          Format.eprintf "ERR: %a\n%!" (LP.prf_data []) x;LP.mkCon "ERROR" 0
+          in
+  let destRef x =
+    match LP.look x with
+    | LP.Ext e when is_ref e -> outref e | _ -> assert false in
+  let destSeq x =
+    match LP.look x with
+    | LP.Seq (l,tl) when LP.equal tl LP.mkNil -> L.to_list l
+    | _ -> assert false in
+  let n = ref 0 in
+  let name () = incr n; "x" ^ string_of_int !n in
+  let rec aux t = 
+  match LP.look t with
+  | LP.DB n -> C.Rel n
+  | LP.Uv _ -> C.Implicit `Hole
+  | LP.App xs when LP.equal (L.hd xs) (LP.mkCon "app" 0) ->
+      C.Appl (List.map aux (destSeq (L.get 1 xs)))
+  | LP.App xs when LP.equal (L.hd xs) (LP.mkCon "prod" 0) ->
+      C.Prod(name(),aux (L.get 1 xs),aux (destBin1 (L.get 2 xs)))
+  | LP.App xs when LP.equal (L.hd xs) (LP.mkCon "lam" 0) ->
+      C.Lambda(name(),aux (L.get 1 xs), aux (destBin1 (L.get 2 xs)))
+  | LP.App xs when LP.equal (L.hd xs) (LP.mkCon "let-in" 0) ->
+      C.LetIn(name(),aux (L.get 1 xs),aux (L.get 2 xs),aux (destBin1 (L.get 3 xs)))
+  | LP.App xs when LP.equal (L.hd xs) (LP.mkCon "atom" 0) ->
+      C.Const (destRef (L.get 1 xs))
+  | LP.Con _ when LP.equal t (LP.mkCon "set" 0) ->
+      C.Sort C.Prop
+  | LP.Con _ when Lpdata.Subst.is_frozen t -> C.Implicit `Hole
+  | LP.App xs when Lpdata.Subst.is_frozen (L.hd xs) -> C.Implicit `Hole
+  | LP.App xs when LP.equal (L.hd xs) (LP.mkCon "match" 0) ->
+      C.Match(NReference.reference_of_string 
+                "cic:/matita/arithmetics/nat/nat.ind(1,0,0)",
+        aux (L.get 1 xs), aux (L.get 2 xs),
+        List.map aux (L.to_list (L.tl(L.tl(L.tl xs)))))
+  | _ ->
+     Format.eprintf "READBACK FAIL: %a\n%!" (LP.prf_data []) t;
+     assert false
+  in
+    aux t
+
+let rec alpha_eq t1 t2 =
+   match (t1,t2) with
+   | C.Sort _, C.Sort _ -> ()
+   | (C.Prod (_,s1,t1), C.Prod(_,s2,t2)) -> alpha_eq s1 s2; alpha_eq t1 t2
+   | (C.Lambda (_,s1,t1), C.Lambda(_,s2,t2)) -> alpha_eq s1 s2; alpha_eq t1 t2
+   | (C.LetIn (_,ty1,s1,t1), C.LetIn(_,ty2,s2,t2)) ->
+      alpha_eq s1 s2; alpha_eq t1 t2;alpha_eq ty1 ty2
+   | (C.Meta _, C.Meta _) -> ()
+   | (C.Meta _, C.Implicit _) -> ()
+   | (C.Implicit _, C.Meta _) -> ()
+   | (C.Implicit _, C.Implicit _) -> ()
+   | (C.Appl l1, C.Appl l2) -> List.iter2 alpha_eq l1 l2
+   | (C.Match (ref1,outtype1,term1,pl1),
+      C.Match (ref2,outtype2,term2,pl2)) when NReference.eq ref1 ref2
+      -> alpha_eq outtype1 outtype2;alpha_eq term1 term2; List.iter2 alpha_eq pl1 pl2
+   | C.Const ref1, C.Const ref2 when NReference.eq ref1 ref2 -> ()
+   | C.Rel n1, C.Rel n2 when n1 = n2 -> ()
+   | _ ->
+(*
+      Printf.eprintf "DIFFERENT\n%s\n%s\n%!"
+        (status#ppterm ~context:[] ~subst:[] ~metasenv:[] t1)
+        (status#ppterm ~context:[] ~subst:[] ~metasenv:[] t2);
+*)
+        raise Not_found
+
+;;
+
+let matita = ref None;;
+let lpp = Lpdata.(
+  let ic = open_in "../simple-refiner.elpi" in
+  Elpi.register_std ();
+  let b = Buffer.create 1024 in
+  begin try
+    while true do Buffer.add_string b (input_line ic^"\n") done;
+    assert false
+  with End_of_file -> () end;
+  let get_matita () = match !matita with None -> assert false | Some x -> x in
+  let destruct t =
+    match LP.look t with
+    | LP.Seq (l,tl)
+      when L.len l = 2 && LP.equal tl LP.mkNil ->
+        (match LP.look (L.hd l) with
+        | LP.Ext c -> c, L.get 1 l
+        | _ -> raise Lprun.NoClause)
+    | _ -> raise Lprun.NoClause in
+  Lprun.register_custom_predicate "environment"
+    (fun t s ->
+       let t, s = Red.nf t s in
+       let k, v = destruct t in
+       if not (is_ref k) then raise Lprun.NoClause
+       else
+         let t = NCic.Const (outref k) in
+         let ty = NCicTypeChecker.typeof (get_matita ()) ~subst:[] ~metasenv:[]
+           [] t in
+         let lp_ty = embed ty in
+         Lprun.unify v lp_ty s);
+  Lprun.register_custom_predicate "environment-body"
+    (fun t s ->
+       let t, s = Red.nf t s in
+       let k, v = destruct t in
+       if not (is_ref k) then raise Lprun.NoClause
+       else
+         try let _,_,bo,_,_,_ =
+           NCicEnvironment.get_checked_def (get_matita()) (outref k) in
+         let lp_bo = embed bo in
+         Lprun.unify v lp_bo s with _ -> raise Lprun.NoClause);
+  Lprun.register_custom_predicate "ind-info"
+    (fun t s ->
+       let t, s = Red.nf t s in
+       let nat, rest = Elpi.check_list2 "ind-info" t in
+       let zero, succ = Elpi.check_list2 "ind-info" rest in
+       let s = Lprun.unify nat  (embed (NCic.Const (NReference.reference_of_string "cic:/matita/arithmetics/nat/nat.ind(1,0,0)"))) s in
+       let s = Lprun.unify zero (embed (NCic.Const (NReference.reference_of_string "cic:/matita/arithmetics/nat/nat.con(0,1,0)"))) s in
+       let s = Lprun.unify succ (embed (NCic.Const (NReference.reference_of_string "cic:/matita/arithmetics/nat/nat.con(0,2,0)"))) s in
+       s
+    );
+  LP.parse_program (Buffer.contents b)
+(*
+  ignore(Trace.parse_argv [|
+    "xxx"; 
+    "-trace-on";"-trace-at";"run";"1";"1000";"-trace-only";"run"
+  |]);
+*))
+;;
+
+let test_elpi metasenv context (status : #NCic.status) term typ =
+  if context <> [] then () else
+  try Lpdata.(
+    matita := Some (status : #NCic.status :> NCic.status);
+    let goal =
+      try 
+        LP.mkSigma1
+         (LP.mkSigma1
+          (LP.mkApp
+           (L.of_list[LP.mkCon "of" 0;embed term;LP.mkDB 1;LP.mkDB 2])))
+      with Lprun.NoClause as e ->
+        Printf.eprintf "no goal:\n%s\n%!"
+          (status#ppterm ~context:[] ~subst:[] ~metasenv:[] term); raise e in
+(*
+    Format.eprintf "@\n@[<hv2>input:@ %a@]@\n%!"
+      (LP.prf_goal []) (fst(Red.nf goal (Subst.empty 0)));
+*)
+    let time0 = Unix.gettimeofday () in
+    try
+      let g,assignments,s,dgs,continuation = Lprun.run_dls lpp goal in
+      let time1 = Unix.gettimeofday () in
+      Format.eprintf "OK : %.5f\n%!" (time1 -. time0);
+      let time0 = Unix.gettimeofday () in
+      let metasenv, subst, bo, ty =
+        typeof status metasenv [] context term `XTNone in
+(*
+      Printf.eprintf "-->:\n%s\n%!"
+        (status#ppterm ~context ~subst:[] ~metasenv term);
+*)
+      let time1 = Unix.gettimeofday () in
+      Format.eprintf "WAS: %.5f\n%!" (time1 -. time0);
+      let refined_goal = List.hd (List.tl assignments) in
+      let refined_goal, _ = Red.nf refined_goal s in
+      let refined_goal = readback refined_goal in
+      Printf.eprintf "OLD refined:\n%s\n%!"
+        (status#ppterm ~context ~subst ~metasenv bo);
+      Printf.eprintf "NEW refined:\n%s\n%!"
+        (status#ppterm ~context ~subst:[] ~metasenv:[] refined_goal);
+      alpha_eq refined_goal (NCicUntrusted.apply_subst status subst context bo)
+
+(*
+   List.iter (fun (g,eh) ->
+    Format.eprintf "delay: @[<hv>%a@ |- %a@]\n%!"
+     (LP.prf_program ~compact:false)
+     (List.map (function i,k,p,u -> i,k,fst(Red.nf p s),u) eh)
+     (LP.prf_goal []) (fst(Red.nf g s))) dgs;
+*)
+    with e ->
+      let time1 = Unix.gettimeofday () in
+      Format.eprintf
+        "FAIL: %s %.3f\n%!" (Printexc.to_string e) (time1 -. time0);
+(*
+      Format.eprintf "@\n@[<hv2>input:@ %a@]@\n%!" (LP.prf_goal []) goal;
+      Printf.eprintf "no solutions\n%!"
+*)
+) with _ -> 
+      Format.eprintf "FAIL\n%!";
+;;
+
+let typeof status ?localise metasenv subst ctx t ty =
+  let res = typeof status ?localise metasenv subst ctx t ty in
+  test_elpi metasenv ctx status (NCicUntrusted.apply_subst status subst ctx t)
+   (match ty with `XTSome ty -> `XTSome (NCicUntrusted.apply_subst status subst ctx ty) | o -> o);
+  res
+
+let check_type (status : #NCic.status) ~localise metasenv subst ctx t =
+  let res = check_type status ~localise metasenv subst ctx t in
+  test_elpi metasenv ctx status (NCicUntrusted.apply_subst status subst ctx t) `XTNone;
+  res
+
+(* /ELPI *)
+
 let rec first f l1 l2 =
   match l1,l2 with
   | x1::tl1, x2::tl2 -> 

@@ -1,4 +1,4 @@
-requires="helm-ng_kernel"
+requires="helm-ng_kernel elpi"
 version="0.0.1"
 archive(byte)="ng_refiner.cma"
 archive(native)="ng_refiner.cmxa"
